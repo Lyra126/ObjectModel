@@ -163,15 +163,38 @@ public final class Interpreter {
      */
     private RuntimeValue visitBuiltinObject(Ast.Function ast) throws EvaluateException {
         String name =ast.name();
-
-        if(ast.arguments().isEmpty() && ast.name().equals("object"))
-            return new RuntimeValue.Object(null, new Scope(scope));
-        if (ast.arguments().size() == 1 && ast.arguments().get(0) instanceof Ast.Variable)
-            return new RuntimeValue.Object(((Ast.Variable) ast.arguments().get(0)).name(), new Scope(scope));
-
         var object = new RuntimeValue.Object(null, new Scope(scope));
 
-        
+        //all objects must define the .prototype/.prototype= methods even if they don't have a prototype (this ensures the prototype can be set or unset)
+        // Define the prototype getter method
+        var prototypeGetter = new RuntimeValue.Function(".prototype", arguments -> {
+            // Return the prototype of the object
+            var prototype = object.scope().resolve("prototype", true);
+
+            // If a prototype is found, return it; otherwise, return null
+            return prototype.orElse(new RuntimeValue.Primitive(null));
+        });
+        object.scope().define(prototypeGetter.name(), prototypeGetter);
+
+        // Define the prototype setter method
+        var prototypeSetter = new RuntimeValue.Function(".prototype=", arguments -> {
+            // Ensure that the number of arguments is exactly one
+            if (arguments.size() != 1) {
+                throw new EvaluateException("Setter function must take exactly one argument.");
+            }
+
+            // Set the prototype of the object
+            object.scope().define("prototype", arguments.get(0));
+
+            // Return the new prototype
+            return arguments.get(0);
+        });
+        object.scope().define(prototypeSetter.name(), prototypeSetter);
+
+        if(ast.arguments().isEmpty() && ast.name().equals("object"))
+            return new RuntimeValue.Object(null, object.scope());
+        if (ast.arguments().size() == 1 && ast.arguments().get(0) instanceof Ast.Variable)
+            return new RuntimeValue.Object(((Ast.Variable) ast.arguments().get(0)).name(), object.scope());
 
         for (Ast argument : ast.arguments()) {
             if (argument instanceof Ast.Function function && !function.name().isEmpty()) {
