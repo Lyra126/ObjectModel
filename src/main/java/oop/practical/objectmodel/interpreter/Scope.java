@@ -18,8 +18,14 @@ public final class Scope {
     }
 
     public Optional<RuntimeValue> resolve(String name, boolean current) {
-        // To be implemented in lecture Friday 2/23
-        return Optional.ofNullable(variables.get(name)); //TODO: parent?
+        // Implemented in M3L5.5 recording
+        if (variables.containsKey(name)) {
+            return Optional.of(variables.get(name));
+        } else if (parent != null && !current) {
+            return parent.resolve(name, current);
+        } else {
+            return Optional.empty();
+        }
     }
 
     public Map<String, RuntimeValue> collect(boolean current) {

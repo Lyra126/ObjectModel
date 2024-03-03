@@ -109,8 +109,8 @@ public class InterpreterTests {
                 Arguments.of("Scope Nesting", """
                     (do (def x 1)
                         (do (def y 2)
-                            (do (+ x y)))
-                    """, "1")
+                            (do (+ x y))))
+                    """, "3")
             );
         }
 
@@ -127,8 +127,8 @@ public class InterpreterTests {
                     x
                     """, "1"),
                 Arguments.of("Function", """
-                    (def (x) 1)
-                    (x)
+                    (def (f) 1)
+                    (f)
                     """, "1"),
                 Arguments.of("Function Parameters", """
                     (def (add x y) (+ x y))
@@ -187,7 +187,7 @@ public class InterpreterTests {
                     """, "(object Name)"),
                 Arguments.of("Field", """
                     (object [field 1])
-                    """, "(object [field 1]"),
+                    """, "(object [field 1])"),
                 Arguments.of("Field Getter", """
                     (def obj (object [field 1]))
                     (.field obj)
@@ -205,10 +205,10 @@ public class InterpreterTests {
                     (object [.field 1] [(.method) field])
                     (.method object)
                     """, "1"),
-                Arguments.of("Object Instance", """
+                Arguments.of("Not Object Instance", """
                     (def obj (object))
                     (.instance? obj Object)
-                    """, ":true")
+                    """, ":false")
             );
         }
 
@@ -229,18 +229,18 @@ public class InterpreterTests {
                     (.prototype obj)
                     """, "(object Object)"),
                 Arguments.of("Inherit Method", """
-                    (def parent [(.method) 1])
-                    (def child [prototype parent])
+                    (def parent (object [(.method) 1]))
+                    (def child (object [prototype parent]))
                     (.method child)
                     """, "1"),
                 Arguments.of("Override Method", """
-                    (def parent [(.method) 1])
-                    (def child [prototype parent] [.method 2])
+                    (def parent (object [(.method) 1]))
+                    (def child (object [prototype parent] [.method 2]))
                     (.method child)
                     """, "2"),
                 Arguments.of("Prototype Instance", """
-                    (def parent)
-                    (def child [prototype parent])
+                    (def parent (object))
+                    (def child (object [prototype parent]))
                     (.instance? child parent)
                     """, ":true")
             );

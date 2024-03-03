@@ -2,11 +2,14 @@ package oop.practical.objectmodel.interpreter;
 
 import oop.practical.objectmodel.lisp.Ast;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.List;
 
 public final class Interpreter {
 
     private Scope scope;
+    private Ast fieldAst;
 
     public Interpreter() {
         scope = new Scope(null);
@@ -65,9 +68,18 @@ public final class Interpreter {
      */
     private RuntimeValue visitBuiltinDo(Ast.Function ast) throws EvaluateException {
         RuntimeValue result = new RuntimeValue.Primitive(null);
-        for (Ast expression : ast.arguments()) {
-            result = visit(expression); //TODO: Scope?
+        Scope parent = scope; // Save the parent scope
+        Scope childScope = new Scope(scope); // Create a child scope for the do block
+        scope = childScope; // Set the child scope as the current scope
+
+        try {
+            for (Ast expression : ast.arguments()) {
+                result = visit(expression); // Visit each expression in the do block
+            }
+        } finally {
+            scope = parent; // Restore the parent scope
         }
+
         return result;
     }
 
@@ -98,9 +110,23 @@ public final class Interpreter {
                 parameters.add(((Ast.Variable) parameter).name());
             }
             var body = ast.arguments().getLast();
+            var parent = scope;
             var definition = new RuntimeValue.Function(function.name(), arguments -> {
-                // To be implemented in lecture Wednesday 2/21
-                return visit(body); //TODO: Arguments/Scope?
+                // Implemented in M3L5.5 recording
+                var child = new Scope(parent);
+                if (arguments.size() != parameters.size()) {
+                    throw new EvaluateException("Expected " + parameters.size() + " arguments, received " + arguments.size() + ".");
+                }
+                for (int i = 0; i < arguments.size(); i++) {
+                    child.define(parameters.get(i), arguments.get(i));
+                }
+                var current = scope;
+                try {
+                    scope = child;
+                    return visit(body);
+                } finally {
+                    scope = current;
+                }
             });
             scope.define(function.name(), definition);
             return definition;
@@ -130,10 +156,105 @@ public final class Interpreter {
     /**
      *  - Field: (object [<name> <value>])
      *  - Method: (object [(<.name> [arguments]) <body>])
+     *     - Note: Since all functions require a name (Ast.Variable) and the
+     *       first element of this list is an Ast.Function, the parser returns
+     *       an Ast.Function with an empty name (""). In other words:
+     *       new Ast.Function("", new Ast.Function(".name", arguments), body);
      */
-    private RuntimeValue visitBuiltinObject(Ast.Function ast) {
-        throw new UnsupportedOperationException("TODO");
+    private RuntimeValue visitBuiltinObject(Ast.Function ast) throws EvaluateException {
+        String name =ast.name();
+
+        if(ast.arguments().isEmpty() && ast.name().equals("object"))
+            return new RuntimeValue.Object(null, new Scope(scope));
+        if (ast.arguments().size() == 1 && ast.arguments().get(0) instanceof Ast.Variable)
+            return new RuntimeValue.Object(((Ast.Variable) ast.arguments().get(0)).name(), new Scope(scope));
+
+        var object = new RuntimeValue.Object(null, new Scope(scope));
+
+        
+
+        for (Ast argument : ast.arguments()) {
+            if (argument instanceof Ast.Function function && !function.name().isEmpty()) {
+                System.out.println("test1");
+                var fieldName = function.name();
+                if (function.arguments().size() != 1) {
+                    throw new EvaluateException("Unexpected number of arguments, expected 1 but received " + function.arguments().size() + ".");
+                }
+                var fieldValue = visit(function.arguments().getFirst());
+                object.scope().define(fieldName, fieldValue);
+                var fieldGetter = new RuntimeValue.Function("." + fieldName, arguments -> {
+                    //TODO: object.scope() is INCORRECT with inheritance - this should be the receiver's scope!
+                    //Remember, with inheritance 'this' is not always the parent; it can be the child instance.
+                    return object.scope().resolve(fieldName, true).orElseThrow(AssertionError::new);
+                });
+                object.scope().define(fieldGetter.name(), fieldGetter);
+
+                var fieldSetter = new RuntimeValue.Function("." + fieldName + "=", arguments -> {
+                    // Check if the number of arguments is not exactly one
+                    if (arguments.size() != 1) {
+                        throw new EvaluateException("Setter function must take exactly one argument.");
+                    }
+
+                    // Get the new value from the arguments list
+                    var newValue = arguments.get(0);
+
+                    // Redefine the field in the object's scope with the new value
+                    object.scope().resolve(fieldName, true).orElseThrow(AssertionError::new);
+
+                    // Return the new value
+                    return newValue;
+                });
+
+                // Define the field setter in the object's scope
+                object.scope().define(fieldSetter.name(), fieldSetter);
+
+            }  else if (argument instanceof Ast.Function function && function instanceof Ast.Function declaration) {
+                System.out.println("test2");
+                // Extract method information from the method declaration
+                String methodName = declaration.name(); // Method name
+
+                // Ensure the method declaration has at least two arguments
+                if (declaration.arguments().size() < 2 || !(declaration.arguments().get(0) instanceof Ast.Function)) {
+                    throw new EvaluateException("Invalid method declaration.");
+                }
+
+                Ast.Function methodArgs = (Ast.Function) declaration.arguments().get(0); // Method arguments
+                Ast methodBody = declaration.arguments().get(1); // Method body
+
+                // Define the method on the object
+                RuntimeValue method = new RuntimeValue.Function(methodName, args -> {
+                    // When the method is invoked, execute it within the scope of the receiver
+                    Scope receiverScope = object.scope();
+
+                    // Define 'this' as a variable in the method's scope
+                    receiverScope.define("this", object);
+
+                    // Bind method arguments to their respective values in the method's scope
+                    if (methodArgs.arguments().size() != args.size()) {
+                        throw new EvaluateException("Method '" + methodName + "' expects " + methodArgs.arguments().size() + " arguments, but received " + args.size() + ".");
+                    }
+
+                    for (int i = 0; i < methodArgs.arguments().size(); i++) {
+                        Ast.Variable argVariable = (Ast.Variable) methodArgs.arguments().get(i);
+                        receiverScope.define(argVariable.name(), args.get(i));
+                    }
+
+                    // Execute the method body
+                    return visit(methodBody);
+                });
+
+                // Define the method in the object's scope
+                object.scope().define("." + methodName, method);
+            } else {
+                throw new EvaluateException("Invalid member definition.");
+            }
+        }
+
+        System.out.println("test3");
+        return object;
     }
+
+
 
     private RuntimeValue visitFunction(Ast.Function ast) throws EvaluateException {
         var value = scope.resolve(ast.name(), false)
@@ -149,8 +270,34 @@ public final class Interpreter {
         }
     }
 
-    private RuntimeValue visitMethod(Ast.Function ast) {
-        throw new UnsupportedOperationException("TODO");
+
+
+    private RuntimeValue visitMethod(Ast.Function ast) throws EvaluateException {
+        // Ensure that the AST represents a method call
+        if (ast.name() == null || !ast.name().startsWith(".")) {
+            throw new EvaluateException("Invalid method call.");
+        }
+
+        // Extract the method name from the AST
+        String methodName = ast.name().substring(1);
+
+        // Ensure there is at least one argument
+        if (ast.arguments().isEmpty()) {
+            throw new EvaluateException("Method call must have at least one argument.");
+        }
+
+        // Get the runtime object from the first argument
+        Ast runtimeObjectAst = ast.arguments().getFirst();
+        RuntimeValue runtimeObject = visit(runtimeObjectAst);
+        if (!(runtimeObject instanceof RuntimeValue.Object)) {
+            throw new EvaluateException("Method must be called on an object.");
+        }
+
+        // Lookup the function object's scope
+        Scope functionScope = ((RuntimeValue.Object) runtimeObject).scope();
+
+        // Retrieve the specified method from the scope
+        return functionScope.resolve(methodName, true).orElseThrow(() -> new EvaluateException("Method '" + methodName + "' not found in object."));
     }
 
 }

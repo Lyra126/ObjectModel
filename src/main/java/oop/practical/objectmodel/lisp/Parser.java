@@ -20,13 +20,11 @@ final class Parser {
             return identifier.length() > 1 && identifier.charAt(0) == ':'
                 ? new Ast.Atom(identifier.substring(1))
                 : new Ast.Variable(identifier);
-        } else if (match("(")) {
-            if (!match(Token.Type.IDENTIFIER)) {
-                throw new ParseException("Expected an identifier at token " + tokens.index + ", received " + tokens.get(0) + ".");
-            }
-            var name = tokens.get(-1).value();
+        } else if (match(List.of("(", "["))) {
+            var open = tokens.get(-1).value();
+            var name = match(Token.Type.IDENTIFIER) ? tokens.get(-1).value() : "";
             var arguments = new ArrayList<Ast>();
-            while (!match(")")) {
+            while (!match(open.equals("(") ? ")" : "]")) {
                 arguments.add(parse());
             }
             return new Ast.Function(name, arguments);
