@@ -69,8 +69,7 @@ public final class Interpreter {
     private RuntimeValue visitBuiltinDo(Ast.Function ast) throws EvaluateException {
         RuntimeValue result = new RuntimeValue.Primitive(null);
         Scope parent = scope; // Save the parent scope
-        Scope childScope = new Scope(scope); // Create a child scope for the do block
-        scope = childScope; // Set the child scope as the current scope
+        scope = new Scope(scope); // Set the child scope as the current scope
 
         try {
             for (Ast expression : ast.arguments()) {
@@ -153,6 +152,7 @@ public final class Interpreter {
         }
     }
 
+
     /**
      *  - Field: (object [<name> <value>])
      *  - Method: (object [(<.name> [arguments]) <body>])
@@ -168,37 +168,59 @@ public final class Interpreter {
         //all objects must define the .prototype/.prototype= methods even if they don't have a prototype (this ensures the prototype can be set or unset)
         // Define the prototype getter method
         var prototypeGetter = new RuntimeValue.Function(".prototype", arguments -> {
-            // Return the prototype of the object
-            var prototype = object.scope().resolve("prototype", true);
-
-            // If a prototype is found, return it; otherwise, return null
-            return prototype.orElse(new RuntimeValue.Primitive(null));
+            return object.scope().resolve("prototype", true).orElse(new RuntimeValue.Primitive(null));
         });
         object.scope().define(prototypeGetter.name(), prototypeGetter);
 
         // Define the prototype setter method
         var prototypeSetter = new RuntimeValue.Function(".prototype=", arguments -> {
+
             // Ensure that the number of arguments is exactly one
-            if (arguments.size() != 1) {
+            if (arguments.size() != 1 ) {
                 throw new EvaluateException("Setter function must take exactly one argument.");
             }
-
             // Set the prototype of the object
-            object.scope().define("prototype", arguments.get(0));
-
+            object.scope().define("prototype", arguments.getFirst());
             // Return the new prototype
-            return arguments.get(0);
+            return arguments.getFirst();
         });
         object.scope().define(prototypeSetter.name(), prototypeSetter);
 
-        if(ast.arguments().isEmpty() && ast.name().equals("object"))
+        var instance = new RuntimeValue.Function(".instance?", arguments -> {
+            // Ensure that the number of arguments is exactly two
+            if (arguments.size() != 3) {
+                throw new EvaluateException("Instance function must take exactly two arguments.");
+            }
+
+            // Get the object and the prototype from the arguments
+            var obj = arguments.get(0);
+            var prototype = arguments.get(1);
+
+            // Get the scope of the object
+            var objScope = obj instanceof RuntimeValue.Object ? ((RuntimeValue.Object) obj).scope() : null;
+
+            // Check if the prototype exists in the object's prototype chain
+            boolean isInstance = false;
+            while (objScope != null) {
+                if (objScope.resolve(prototype.toString(), false).isPresent()) {
+                    isInstance = true;
+                    break;
+                }
+            }
+
+            // Return the result as an Atom
+            return isInstance ? new RuntimeValue.Primitive(":true") : new RuntimeValue.Primitive(":false");
+        });
+        // Define the .instance? function in the object's scope
+        object.scope().define(instance.name(), instance);
+
+        if(ast.arguments().isEmpty()) //return object
             return new RuntimeValue.Object(null, object.scope());
-        if (ast.arguments().size() == 1 && ast.arguments().get(0) instanceof Ast.Variable)
-            return new RuntimeValue.Object(((Ast.Variable) ast.arguments().get(0)).name(), object.scope());
+        if (ast.arguments().size() == 1 && ast.arguments().getFirst() instanceof Ast.Variable)
+            return new RuntimeValue.Object(((Ast.Variable) ast.arguments().getFirst()).name(), object.scope());
 
         for (Ast argument : ast.arguments()) {
             if (argument instanceof Ast.Function function && !function.name().isEmpty()) {
-                System.out.println("test1");
                 var fieldName = function.name();
                 if (function.arguments().size() != 1) {
                     throw new EvaluateException("Unexpected number of arguments, expected 1 but received " + function.arguments().size() + ".");
@@ -207,73 +229,90 @@ public final class Interpreter {
                 object.scope().define(fieldName, fieldValue);
                 var fieldGetter = new RuntimeValue.Function("." + fieldName, arguments -> {
                     //TODO: object.scope() is INCORRECT with inheritance - this should be the receiver's scope!
+
                     //Remember, with inheritance 'this' is not always the parent; it can be the child instance.
                     return object.scope().resolve(fieldName, true).orElseThrow(AssertionError::new);
                 });
                 object.scope().define(fieldGetter.name(), fieldGetter);
-
                 var fieldSetter = new RuntimeValue.Function("." + fieldName + "=", arguments -> {
                     // Check if the number of arguments is not exactly one
-                    if (arguments.size() != 1) {
+                    if (arguments.size() != 1 ) {
                         throw new EvaluateException("Setter function must take exactly one argument.");
                     }
-
-                    // Get the new value from the arguments list
-                    var newValue = arguments.get(0);
-
+                    var newValue = arguments.getFirst();
                     // Redefine the field in the object's scope with the new value
-                    object.scope().resolve(fieldName, true).orElseThrow(AssertionError::new);
-
-                    // Return the new value
+                    object.scope().define(fieldName, newValue);
                     return newValue;
                 });
-
-                // Define the field setter in the object's scope
                 object.scope().define(fieldSetter.name(), fieldSetter);
 
-            }  else if (argument instanceof Ast.Function function && function instanceof Ast.Function declaration) {
-                System.out.println("test2");
+            } else if (argument instanceof Ast.Function function && function instanceof Ast.Function declaration) {
                 // Extract method information from the method declaration
                 String methodName = declaration.name(); // Method name
-
                 // Ensure the method declaration has at least two arguments
-                if (declaration.arguments().size() < 2 || !(declaration.arguments().get(0) instanceof Ast.Function)) {
+                if (declaration.arguments().size() < 2 || !(declaration.arguments().get(0) instanceof Ast.Function))
                     throw new EvaluateException("Invalid method declaration.");
-                }
 
                 Ast.Function methodArgs = (Ast.Function) declaration.arguments().get(0); // Method arguments
                 Ast methodBody = declaration.arguments().get(1); // Method body
-
+                var methodValue = visit(declaration.arguments().getFirst());
+                object.scope().define(methodName, methodValue);
                 // Define the method on the object
-                RuntimeValue method = new RuntimeValue.Function(methodName, args -> {
+                var method = new RuntimeValue.Function("." + methodName, arguments -> {
                     // When the method is invoked, execute it within the scope of the receiver
-                    Scope receiverScope = object.scope();
-
                     // Define 'this' as a variable in the method's scope
-                    receiverScope.define("this", object);
+                    object.scope().define("this", object);
 
                     // Bind method arguments to their respective values in the method's scope
-                    if (methodArgs.arguments().size() != args.size()) {
-                        throw new EvaluateException("Method '" + methodName + "' expects " + methodArgs.arguments().size() + " arguments, but received " + args.size() + ".");
-                    }
+                    if (methodArgs.arguments().size() != arguments.size())
+                        throw new EvaluateException("Method '" + methodName + "' expects " + methodArgs.arguments().size() + " arguments, but received " + arguments.size() + ".");
 
                     for (int i = 0; i < methodArgs.arguments().size(); i++) {
                         Ast.Variable argVariable = (Ast.Variable) methodArgs.arguments().get(i);
-                        receiverScope.define(argVariable.name(), args.get(i));
+                        object.scope().define(argVariable.name(), arguments.get(i));
                     }
-
                     // Execute the method body
                     return visit(methodBody);
                 });
+                object.scope().define(method.name(), method);
+                /*String methodName = declaration.name();
+                var methodValue = visit(declaration.arguments().getFirst());
+                object.scope().define(methodName, methodValue);
+                Scope parent = scope;
+                if (object.scope().resolve(methodName, false).isPresent()) {
+                    throw new EvaluateException("Redefined method " + methodName + ".");
+                }
+                // Extract parameters
+                List<String> parameters = new ArrayList<>();
+                for (Ast parameter : declaration.arguments()) {
+                    if (!(parameter instanceof Ast.Variable)) {
+                        throw new EvaluateException("Invalid method parameter form.");
+                    }
+                    parameters.add(((Ast.Variable) parameter).name());
+                }
 
-                // Define the method in the object's scope
-                object.scope().define("." + methodName, method);
-            } else {
+                Ast body = declaration.arguments().getLast();
+
+                // Define method within the scope of the current object
+                object.scope().define(methodName, new RuntimeValue.Function(methodName, arguments -> {
+                    // Implemented in M3L5.5 recording
+                    Scope childScope = new Scope(object.scope());
+                    if (arguments.size() != parameters.size()) {
+                        throw new EvaluateException("Expected " + parameters.size() + " arguments, received " + arguments.size() + ".");
+                    }
+                    for (int i = 0; i < parameters.size(); i++) {
+                        childScope.define(parameters.get(i), arguments.get(i));
+                    }
+                    try {
+                        scope = childScope;
+                        return visit(body);
+                    } finally {
+                        scope = parent;
+                    }
+                }));*/
+            } else
                 throw new EvaluateException("Invalid member definition.");
-            }
         }
-
-        System.out.println("test3");
         return object;
     }
 
@@ -302,11 +341,11 @@ public final class Interpreter {
         }
 
         // Extract the method name from the AST
-        String methodName = ast.name().substring(1);
+        String methodName = ast.name();
 
         // Ensure there is at least one argument
         if (ast.arguments().isEmpty()) {
-            throw new EvaluateException("Method call must have at least one argument.");
+            throw new EvaluateException("Method '" + methodName + "' must have at least 1 argument");
         }
 
         // Get the runtime object from the first argument
@@ -318,9 +357,24 @@ public final class Interpreter {
 
         // Lookup the function object's scope
         Scope functionScope = ((RuntimeValue.Object) runtimeObject).scope();
-
         // Retrieve the specified method from the scope
-        return functionScope.resolve(methodName, true).orElseThrow(() -> new EvaluateException("Method '" + methodName + "' not found in object."));
-    }
 
+        var func = functionScope.resolve(methodName, true).orElseThrow(() -> new EvaluateException("Method '" + methodName + "' not found in object."));
+        //call method
+        if (!(func instanceof RuntimeValue.Function)) {
+            throw new EvaluateException("Make sure it's a runtime value func");
+        }
+
+        //handles when arguments are provided, like setters
+        if (ast.arguments().size() > 1) {
+            List<RuntimeValue> args = new ArrayList<>();
+            for (int i = 1; i < ast.arguments().size(); i++) {
+                args.add(visit(ast.arguments().get(i)));
+            }
+
+            return ((RuntimeValue.Function) func).definition().invoke(args);
+        }
+        //todo figure out how to handle this, current instance of object invoked, i.e. scope, changing method defintions
+        return ((RuntimeValue.Function) func).definition().invoke(List.of());
+    }
 }

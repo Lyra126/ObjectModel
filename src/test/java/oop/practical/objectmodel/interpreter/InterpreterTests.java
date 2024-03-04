@@ -18,13 +18,13 @@ public class InterpreterTests {
      */
     public static Stream<Arguments> getExportedTests() {
         return Stream.of(
-            ExpressionTests.testLiteral(),
-            ExpressionTests.testFunction(),
-            BuiltinTests.testDo(),
-            BuiltinTests.testDo(),
-            BuiltinTests.testSet(),
-            ObjectTests.testObject(),
-            ObjectTests.testPrototype()
+                ExpressionTests.testLiteral(),
+                ExpressionTests.testFunction(),
+                BuiltinTests.testDo(),
+                BuiltinTests.testDo(),
+                BuiltinTests.testSet(),
+                ObjectTests.testObject(),
+                ObjectTests.testPrototype()
         ).flatMap(s -> s);
     }
 
@@ -39,13 +39,13 @@ public class InterpreterTests {
 
         private static Stream<Arguments> testLiteral() {
             return Stream.of(
-                Arguments.of("Integer", """
+                    Arguments.of("Integer", """
                     1
                     """, "1"),
-                Arguments.of("Decimal", """
+                    Arguments.of("Decimal", """
                     1.0
                     """, "1.0"),
-                Arguments.of("Atom", """
+                    Arguments.of("Atom", """
                     :name
                     """, ":name")
             );
@@ -59,22 +59,22 @@ public class InterpreterTests {
 
         private static Stream<Arguments> testFunction() {
             return Stream.of(
-                Arguments.of("Add", """
+                    Arguments.of("Add", """
                     (+ 1 2)
                     """, "3"),
-                Arguments.of("Sub Single", """
+                    Arguments.of("Sub Single", """
                     (- 1)
                     """, "-1"),
-                Arguments.of("Sub Multiple", """
+                    Arguments.of("Sub Multiple", """
                     (- 1 2 3)
                     """, "-4"),
-                Arguments.of("Mul", """
+                    Arguments.of("Mul", """
                     (* 1 2 3 4)
                     """, "24"),
-                Arguments.of("Div Single", """
+                    Arguments.of("Div Single", """
                     (/ 2.0)
                     """, "0.5"),
-                Arguments.of("Div Multiple", """
+                    Arguments.of("Div Multiple", """
                     (/ 2.0)
                     """, "0.5")
             );
@@ -93,20 +93,20 @@ public class InterpreterTests {
 
         private static Stream<Arguments> testDo() {
             return Stream.of(
-                Arguments.of("Empty", """
+                    Arguments.of("Empty", """
                     (do)
                     """, "null"),
-                Arguments.of("Multiple", """
+                    Arguments.of("Multiple", """
                     (do 1 2 3)
                     """, "3"),
-                Arguments.of("Scope Enter", """
+                    Arguments.of("Scope Enter", """
                     (do (def x 1) x)
                     """, "1"),
-                Arguments.of("Scope Exit", """
+                    Arguments.of("Scope Exit", """
                     (do (def x 1))
                     x
                     """, null),
-                Arguments.of("Scope Nesting", """
+                    Arguments.of("Scope Nesting", """
                     (do (def x 1)
                         (do (def y 2)
                             (do (+ x y))))
@@ -122,22 +122,22 @@ public class InterpreterTests {
 
         private static Stream<Arguments> testDef() {
             return Stream.of(
-                Arguments.of("Variable", """
+                    Arguments.of("Variable", """
                     (def x 1)
                     x
                     """, "1"),
-                Arguments.of("Function", """
+                    Arguments.of("Function", """
                     (def (f) 1)
                     (f)
                     """, "1"),
-                Arguments.of("Function Parameters", """
+                    Arguments.of("Function Parameters", """
                     (def (add x y) (+ x y))
                     (add 1 2)
                     """, "3"),
-                Arguments.of("Invalid", """
+                    Arguments.of("Invalid", """
                     (def 1)
                     """, null),
-                Arguments.of("Redefined", """
+                    Arguments.of("Redefined", """
                     (def x 1)
                     (def x 2)
                     """, null)
@@ -152,14 +152,14 @@ public class InterpreterTests {
 
         private static Stream<Arguments> testSet() {
             return Stream.of(
-                Arguments.of("Variable", """
+                    Arguments.of("Variable", """
                     (def x 1)
                     (set! x 2)
                     """, "2"),
-                Arguments.of("Undefined", """
+                    Arguments.of("Undefined", """
                     (set! x 1)
                     """, null),
-                Arguments.of("Invalid", """
+                    Arguments.of("Invalid", """
                     (def x 1)
                     (set! (x) 2)
                     """, null)
@@ -179,33 +179,33 @@ public class InterpreterTests {
 
         public static Stream<Arguments> testObject() {
             return Stream.of(
-                Arguments.of("Empty", """
+                    Arguments.of("Empty", """
                     (object)
                     """, "(object)"),
-                Arguments.of("Name", """
+                    Arguments.of("Name", """
                     (object Name)
                     """, "(object Name)"),
-                Arguments.of("Field", """
+                    Arguments.of("Field", """
                     (object [field 1])
                     """, "(object [field 1])"),
-                Arguments.of("Field Getter", """
+                    Arguments.of("Field Getter", """
                     (def obj (object [field 1]))
                     (.field obj)
                     """, "1"),
-                Arguments.of("Field Setter", """
+                    Arguments.of("Field Setter", """
                     (def obj (object [field 1]))
                     (.field= obj 2)
                     (.field obj)
                     """, "2"),
-                Arguments.of("Method", """
-                    (object [(.method) 1])
-                    (.method object)
+                    Arguments.of("Method", """
+                    (def obj (object [(.method) 1]))
+                    (.method obj)
                     """, "1"),
-                Arguments.of("Method Scope", """
-                    (object [.field 1] [(.method) field])
-                    (.method object)
+                    Arguments.of("Method Scope", """
+                    (def obj (object [.field 1] [(.method) field]))
+                    (.method obj)
                     """, "1"),
-                Arguments.of("Not Object Instance", """
+                    Arguments.of("Not Object Instance", """
                     (def obj (object))
                     (.instance? obj Object)
                     """, ":false")
@@ -220,25 +220,26 @@ public class InterpreterTests {
 
         public static Stream<Arguments> testPrototype() {
             return Stream.of(
-                Arguments.of("Get", """
-                    (.prototype (object))
+                    Arguments.of("Get", """
+                    (def obj (object))
+                    (.prototype obj)
                     """, "null"),
-                Arguments.of("Set", """
+                    Arguments.of("Set", """
                     (def obj (object))
                     (.prototype= obj Object)
                     (.prototype obj)
                     """, "(object Object)"),
-                Arguments.of("Inherit Method", """
+                    Arguments.of("Inherit Method", """
                     (def parent (object [(.method) 1]))
                     (def child (object [prototype parent]))
                     (.method child)
                     """, "1"),
-                Arguments.of("Override Method", """
+                    Arguments.of("Override Method", """
                     (def parent (object [(.method) 1]))
                     (def child (object [prototype parent] [.method 2]))
                     (.method child)
                     """, "2"),
-                Arguments.of("Prototype Instance", """
+                    Arguments.of("Prototype Instance", """
                     (def parent (object))
                     (def child (object [prototype parent]))
                     (.instance? child parent)
