@@ -202,7 +202,7 @@ public class InterpreterTests {
                     (.method obj)
                     """, "1"),
                     Arguments.of("Method Scope", """
-                    (def obj (object [.field 1] [(.method) field]))
+                    (def obj (object [field 1] [(.method) field]))
                     (.method obj)
                     """, "1"),
                     Arguments.of("Not Object Instance", """
@@ -236,7 +236,7 @@ public class InterpreterTests {
                     """, "1"),
                     Arguments.of("Override Method", """
                     (def parent (object [(.method) 1]))
-                    (def child (object [prototype parent] [.method 2]))
+                    (def child (object [prototype parent] [(.method) 2]))
                     (.method child)
                     """, "2"),
                     Arguments.of("Prototype Instance", """
