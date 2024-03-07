@@ -186,6 +186,8 @@ public final class Interpreter {
         });
         object.scope().define(prototypeSetter.name(), prototypeSetter);
 
+        Scope parent = scope;
+
         var instance = new RuntimeValue.Function(".instance?", arguments -> {
             // Ensure that the number of arguments is exactly two
             System.out.println(arguments.get(0));
@@ -203,11 +205,22 @@ public final class Interpreter {
 
             // Check if the prototype exists in the object's prototype chain
             boolean isInstance = false;
-            assert objScope != null;
-            if (objScope.resolve(prototype.toString(), false).isPresent()) {
-                isInstance = true;
-            }
 
+            // Check if the prototype matches directly
+            if (obj instanceof RuntimeValue.Object) {
+                if (objScope.resolve(prototype.toString(), false).isPresent()) {
+                    isInstance = true;
+                } else {
+                    // Check if the prototype matches any prototype in the chain
+                    Scope parentScope = objScope;
+                    while (parentScope != parent) {
+                        if (parentScope.resolve("prototype", true).filter(p -> p.equals(prototype)).isPresent()) {
+                            isInstance = true;
+                        }
+                        parentScope = parent;
+                    }
+                }
+            }
             // Return the result as an Atom
             return isInstance ? new RuntimeValue.Primitive(":true") : new RuntimeValue.Primitive(":false");
         });
@@ -218,6 +231,7 @@ public final class Interpreter {
             return new RuntimeValue.Object(null, object.scope());
         if (ast.arguments().size() == 1 && ast.arguments().getFirst() instanceof Ast.Variable)
             return new RuntimeValue.Object(((Ast.Variable) ast.arguments().getFirst()).name(), object.scope());
+
 
         for (Ast argument : ast.arguments()) {
             if (argument instanceof Ast.Function function && !function.name().isEmpty()) {
