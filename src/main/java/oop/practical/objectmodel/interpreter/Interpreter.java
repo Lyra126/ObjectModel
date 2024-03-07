@@ -50,7 +50,7 @@ public final class Interpreter {
 
     public RuntimeValue visit(Ast.Variable ast) throws EvaluateException {
         return scope.resolve(ast.name(), false)
-            .orElseThrow(() -> new EvaluateException("Undefined variable " + ast.name() + "."));
+                .orElseThrow(() -> new EvaluateException("Undefined variable " + ast.name() + "."));
     }
 
     public RuntimeValue visit(Ast.Function ast) throws EvaluateException {
@@ -188,7 +188,9 @@ public final class Interpreter {
 
         var instance = new RuntimeValue.Function(".instance?", arguments -> {
             // Ensure that the number of arguments is exactly two
-            if (arguments.size() != 3) {
+            System.out.println(arguments.get(0));
+            System.out.println(arguments.get(1));
+            if (arguments.size() != 2) {
                 throw new EvaluateException("Instance function must take exactly two arguments.");
             }
 
@@ -201,11 +203,9 @@ public final class Interpreter {
 
             // Check if the prototype exists in the object's prototype chain
             boolean isInstance = false;
-            while (objScope != null) {
-                if (objScope.resolve(prototype.toString(), false).isPresent()) {
-                    isInstance = true;
-                    break;
-                }
+            assert objScope != null;
+            if (objScope.resolve(prototype.toString(), false).isPresent()) {
+                isInstance = true;
             }
 
             // Return the result as an Atom
@@ -298,7 +298,7 @@ public final class Interpreter {
 
     private RuntimeValue visitFunction(Ast.Function ast) throws EvaluateException {
         var value = scope.resolve(ast.name(), false)
-            .orElseThrow(() -> new EvaluateException("Undefined function " + ast.name() + "."));
+                .orElseThrow(() -> new EvaluateException("Undefined function " + ast.name() + "."));
         if (value instanceof RuntimeValue.Function function) {
             var arguments = new ArrayList<RuntimeValue>();
             for (Ast argument : ast.arguments()) {
@@ -346,7 +346,12 @@ public final class Interpreter {
         //handles when arguments are provided, like setters
         if (ast.arguments().size() > 1) {
             List<RuntimeValue> args = new ArrayList<>();
-            for (int i = 1; i < ast.arguments().size(); i++) {
+            if(methodName.endsWith("=")){
+                args.add(visit(ast.arguments().get(1)));
+                return ((RuntimeValue.Function) func).definition().invoke(args);
+            }
+
+            for (int i = 0; i < ast.arguments().size(); i++) {
                 args.add(visit(ast.arguments().get(i)));
             }
 
